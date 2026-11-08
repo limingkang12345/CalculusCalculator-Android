@@ -1,0 +1,180 @@
+plugins {
+    id 'com.android.application'
+    id 'com.chaquo.python'
+}
+
+// ---------------------------------------------------------------------------
+// Chaquopy 在「构建时」需要调用构建机上的 CPython（生成 requirements、编译 pyc）。
+// Windows 上若未安装 Python 或未勾选 "Add python.exe to PATH"，
+// generateDebugPythonRequirements 会报 "Couldn't find Python"。
+// 下面自动探测本机 Python；也可在 gradle.properties 里显式指定，例如：
+//   chaquopy.buildPython=C:/Users/me/AppData/Local/Programs/Python/Python311/python.exe
+// ---------------------------------------------------------------------------
+def probePython = { List<String> cmd ->
+    try {
+        def pb = new ProcessBuilder(cmd.collect { it.toString() } +
+                ['-c', 'import sys;print("%d.%d" % sys.version_info[:2])'])
+        pb.redirectErrorStream(true)
+        def p = pb.start()
+        def txt = p.inputStream.getText('UTF-8').trim()
+        p.waitFor()
+        if (p.exitValue() != 0) return null
+        def m = txt =~ /(3\.\d+)/
+        if (!m.find()) return null
+        def v = m.group(1)
+        return (v.tokenize('.')[1].toInteger() >= 7) ? v : null
+    } catch (Exception ignored) {
+        return null
+    }
+}
+
+def findBuildPython = {
+    // 1) 显式覆盖：gradle.properties / -Pchaquopy.buildPython=...
+    if (project.hasProperty('chaquopy.buildPython')) {
+        def v = project.property('chaquopy.buildPython')?.toString()?.trim()
+        if (v) return [cmd: [v], version: probePython([v])]
+    }
+    // 2) 环境变量覆盖
+    def env = System.getenv('CHAQUOPY_BUILD_PYTHON')
+    if (env && new File(env).isFile()) return [cmd: [env], version: probePython([env])]
+
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+    def candidates = []
+
+    // 3) PATH 中的解释器
+    def dirs = (System.getenv('PATH') ?: '')
+            .split(File.pathSeparator)
+            .collect { it.trim().replace('"', '').replace("'", '') }
+            .findAll { it }
+    (isWindows ? ['python.exe', 'python3.exe'] : ['python3', 'python']).each { name ->
+        dirs.each { d -> candidates << [new File(d, name).absolutePath] }
+    }
+
+    // 4) Windows 常见安装位置
+    if (isWindows) {
+        def roots = []
+        def la = System.getenv('LOCALAPPDATA')
+        def up = System.getenv('USERPROFILE')
+        if (la) { roots << new File(la, 'Programs/Python') }
+        if (up) {
+            roots << new File(up, 'AppData/Local/Programs/Python')
+            roots << new File(up, 'anaconda3')
+            roots << new File(up, 'miniconda3')
+        }
+        ['C:/Python313', 'C:/Python312', 'C:/Python311', 'C:/Python310', 'C:/Python39'].each {
+            roots << new File(it)
+        }
+        roots.each { r ->
+            if (!r.isDirectory()) return
+            def direct = new File(r, 'python.exe')
+            if (direct.isFile()) candidates << [direct.absolutePath]
+            r.listFiles()?.findAll { it.isDirectory() }?.each { sub ->
+                def e = new File(sub, 'python.exe')
+                if (e.isFile()) candidates << [e.absolutePath]
+            }
+        }
+        // Windows Python Launcher 兜底
+        candidates << ['py', '-3']
+    }
+
+    for (def c : candidates) {
+        def v = probePython(c)
+        if (v) return [cmd: c, version: v]
+    }
+    return null
+}
+
+def buildPy = findBuildPython()
+
+if (buildPy) {
+    logger.lifecycle("Chaquopy: 构建机 Python ${buildPy.version ?: '版本未知'} -> ${buildPy.cmd.join(' ')}")
+    if (buildPy.version && buildPy.version != '3.11') {
+        logger.warn('Chaquopy: 目标运行时固定为 3.11；构建机建议同样使用 Python 3.11 (64-bit)，' +
+                '否则 pyc 预编译会跳过（不影响构建，仅启动时稍慢）。')
+    }
+} else {
+    logger.warn('\n' + '=' * 72 + '''
+  [Chaquopy] 未在构建机上找到 CPython，编译将失败并提示 "Couldn't find Python"。
+  解决（任选其一）：
+    1) 安装 Python 3.11 (64-bit)：https://www.python.org/downloads/release/python-3119/
+       安装时务必勾选 "Add python.exe to PATH"，装完重启 Android Studio。
+    2) 或在 gradle.properties 中显式指定：
+       chaquopy.buildPython=C:/Users/<用户名>/AppData/Local/Programs/Python/Python311/python.exe
+''' + '=' * 72)
+}
+
+android {
+    namespace 'com.limingkang.calculuscalculator'
+    compileSdk 34
+
+    // Chaquopy 15 已预编译好所有 native 库，无需 ndkVersion / 安装 NDK。
+
+    defaultConfig {
+        applicationId "com.limingkang.calculuscalculator"
+        minSdk 24
+        targetSdk 34
+        versionCode 2
+        versionName "2.1.1"
+
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+}
+
+// ---------------------------------------------------------------------------
+// pip 源配置（三个要点，缺一不可）：
+// 1) 主源用阿里云 PyPI 镜像：pypi.org 的 wheel 存放在 files.pythonhosted.org，
+//    国内直连下载 sympy 这类 6MB+ 包经常 "Read timed out"。
+// 2) 私有源必须显式写 --extra-index-url：Chaquopy 默认通过环境变量注入
+//    https://chaquo.com/pypi-13.1/，一旦命令行出现 --extra-index-url 就会把它
+//    覆盖掉；numpy / matplotlib 等 native 包的 Android 预编译 wheel 只在此源，
+//    PyPI 上根本没有 Android 标签的 wheel。
+// 3) --only-binary=:all: 禁止源码包：否则镜像里版本号更高的 numpy-2.x.tar.gz
+//    会被选中并在构建机上编译，触发 "Chaquopy_cannot_compile_native_code"。
+// 换 PyPI 镜像只改第 1 项 URL 即可；不要加 --no-index。
+// ---------------------------------------------------------------------------
+// Chaquopy 15 的标准 DSL（旧 android.defaultConfig.python{} 已废弃）
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+        if (buildPy) {
+            buildPython(*buildPy.cmd)
+        }
+        pip {
+            options("--index-url", "https://mirrors.aliyun.com/pypi/simple/")
+            options("--extra-index-url", "https://chaquo.com/pypi-13.1/")
+            options("--only-binary", ":all:")
+            options("--timeout", "60")
+            options("--retries", "5")
+            install "sympy"
+            install "numpy"
+            install "matplotlib"
+            install "mpmath"
+            // $LaTeX$ 输入所需；若该包在你的构建环境下载失败，可注释掉此行，
+            // 其余功能不受影响（core/sympify.py 已做延迟导入）。
+            install "latex2sympy2_extended"
+        }
+    }
+}
+
+dependencies {
+    // Chaquopy 运行时由插件自动注入
+}

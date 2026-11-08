@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script>window.MathJax = {
+  tex: {displayMath: [['$$', '$$']]},
+  svg: {fontCache: 'local'},
+  startup: {typeset: false}
+};</script>
+<script src="../mathjax/es5/tex-svg.js"></script>
+<style>
+  html, body {margin: 0; padding: 0; height: 100%; background: #ffffff; overflow: hidden;}
+  #canvas-wrap {
+    position: absolute; inset: 0; overflow: auto; padding: 16px;
+    box-sizing: border-box;
+  }
+  #canvas {
+    position: relative; width: 2200px; height: 1400px;
+    font-size: 42px;
+    background-image: radial-gradient(#e6e9ee 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  #empty-hint {
+    position: absolute; left: 40px; top: 40px; color: #8c959f;
+    font: 14px/1.9 "Microsoft YaHei", sans-serif; pointer-events: none;
+  }
+  .math-item {
+    position: absolute; box-sizing: border-box;
+    padding: 16px 22px 34px; background: #ffffff;
+    border: 1px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .math-item.dragging {
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+    border-color: #afb8c1;
+  }
+  .math-item.collision {
+    border-color: #cf222e; background: #fff5f5;
+  }
+  .drag-handle {
+    position: absolute; left: -11px; top: -11px;
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 1.5px solid #e53935; background: #ffffff; color: #e53935;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; line-height: 1; cursor: grab; user-select: none;
+    z-index: 10; opacity: 0.7;
+  }
+  .drag-handle:hover {opacity: 1; background: #fff5f5;}
+  .math-item.dragging .drag-handle {cursor: grabbing;}
+  .card-note {
+    position: absolute; right: 10px; top: 8px; z-index: 11;
+    padding: 1px 7px; border-radius: 999px;
+    background: rgba(246, 248, 250, 0.94); border: 1px solid #e5e7eb;
+    color: #57606a; font: 11px/1.6 "Microsoft YaHei", sans-serif;
+    pointer-events: none; white-space: nowrap;
+  }
+  .card-actions {
+    position: absolute; right: 6px; bottom: 6px; z-index: 12;
+    display: flex; gap: 4px;
+  }
+  .card-button {
+    border: 1px solid #d0d7de; border-radius: 5px;
+    background: #f6f8fa; color: #57606a;
+    font: 11px/1.4 "Microsoft YaHei", sans-serif;
+    padding: 2px 7px; cursor: pointer; user-select: none;
+    white-space: nowrap;
+  }
+  .card-button:hover {background: #eaeef2; color: #24292f;}
+  .card-button.delete:hover {background: #ffebe9; border-color: #cf222e; color: #cf222e;}
+  .item-content {position: relative; color: #1f2328; display: inline-block;}
+  .item-content.error {
+    color: #cf222e; font: 14px/1.6 "Microsoft YaHei", sans-serif;
+    white-space: pre-wrap; max-width: 520px;
+  }
+  .action-layer {
+    position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  }
+  .action-hit {position: absolute; pointer-events: auto; cursor: pointer;}
+  svg {color: #1f2328;}
+  g[id*="__l0-"] {color: #e53935;}
+  g[id*="__l1-"] {color: #2e7d32;}
+  g[id*="__l2-"] {color: #1565c0;}
+  g[id*="__l3-"] {color: #6a1b9a;}
+  g[id*="__l"] {cursor: pointer;}
+  #toolbar {
+    position: fixed; top: 10px; right: 14px; z-index: 15;
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 12px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid #d0d7de; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    font: 12px "Microsoft YaHei", sans-serif; color: #57606a;
+    user-select: none;
+  }
+  #size-slider {width: 120px; accent-color: #0969da;}
+  #selection-box {
+    position: fixed; display: none; pointer-events: none; z-index: 20;
+    border: 1.5px dashed #0969da; border-radius: 6px;
+    box-sizing: border-box;
+  }
+  #selection-tag {
+    position: fixed; display: none; pointer-events: none; z-index: 21;
+    padding: 2px 7px; border-radius: 4px; background: #ffffff;
+    border: 1px solid currentColor;
+    font: 12px/1.4 "Microsoft YaHei", sans-serif;
+    white-space: nowrap;
+  }
+  #node-handle {
+    position: fixed; display: none; width: 20px; height: 20px;
+    border-radius: 50%; background: #ffffff; border: 1.5px solid #0969da;
+    color: #0969da; align-items: center; justify-content: center;
+    font-size: 12px; line-height: 1; cursor: grab; z-index: 25;
+    user-select: none; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+  #node-handle:hover {background: #f0f7ff;}
+  #transform-button {
+    position: fixed; display: none; width: 20px; height: 20px;
+    border-radius: 50%; background: #ffffff; border: 1.5px solid #0969da;
+    color: #0969da; align-items: center; justify-content: center;
+    font-size: 11px; line-height: 1; cursor: pointer; z-index: 25;
+    user-select: none; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+  #transform-button:hover {background: #f0f7ff;}
+  #action-badge {
+    position: fixed; display: none; z-index: 30;
+    padding: 3px 9px; border-radius: 999px;
+    background: #24292f; color: #ffffff;
+    font: 12px/1.4 "Microsoft YaHei", sans-serif;
+    cursor: pointer; user-select: none; white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  }
+  #action-badge:hover {background: #0969da;}
+</style>
+<link rel="stylesheet" href="extra.css">
+<link rel="stylesheet" href="../mathkeyboard.css">
+<link rel="stylesheet" href="../mathlive/dist/mathlive-static.css">
+<script src="../mathlive/dist/mathlive.min.js"></script>
+</head>
+<body>
+
+<div id="appbar">
+  <div class="kbd-field-row" id="expr-row">
+    <input id="expr-input" type="text" autocomplete="off"
+           placeholder="例如 2*(x+1) + 1/(x-1) 或 x^2=4"
+           value="2*(x+1) + 1/(x-1)">
+    <button id="kbd-btn" class="kbd-open" data-kbd="expr-input" title="数学键盘">∑</button>
+  </div>
+  <button id="add-btn" class="btn primary">添加</button>
+  <button id="undo-btn" class="btn" disabled>撤销</button>
+  <button id="redo-btn" class="btn" disabled>重做</button>
+  <span id="count">0 个表达式</span>
+</div>
+<div id="helpbar">拖拽左上角红圈移动 · 点击 +/− 交换相邻项 · 点击括号展开 · 点击节点查看结构</div>
+<div id="detailbar">
+  <div id="sel-info">未选中节点</div>
+  <pre id="detail">点击画布中的节点，查看其自定义结构与 SymPy 表达式</pre>
+  <div id="status"></div>
+</div>
+<div id="dlg-mask" class="hidden">
+  <div id="dlg">
+    <div id="dlg-title">对话框</div>
+    <div id="dlg-body"></div>
+    <div id="dlg-foot">
+      <button id="dlg-cancel" class="btn">取消</button>
+      <button id="dlg-ok" class="btn primary">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <div id="empty-hint">在上方输入表达式，按回车或点击“添加”<br>可向画布添加多个表达式；拖拽左上角红圈移动。</div>
+  </div>
+</div>
+<div id="toolbar">
+  <span>字号</span>
+  <input id="size-slider" type="range" min="24" max="96" step="2" value="42">
+  <span id="size-value">42px</span>
+</div>
+<div id="selection-box"></div>
+<div id="selection-tag"></div>
+<div id="node-handle" title="拖拽选中节点">⠿</div>
+<div id="transform-button" title="变形选中节点">变</div>
+<div id="action-badge"></div>
+<script>
+const canvas = document.getElementById('canvas');
+const badge = document.getElementById('action-badge');
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+let nodeMeta = {};
+let selectedId = null;
+let hoverNode = null;
+let hoverRect = null;
+let actionTarget = null;
+let dragState = null;
+let nodeDrag = null;
+let suppressClickUntil = 0;
+
+/* 触摸拖拽：移动/结束事件统一挂到 document，并在拖拽期间用全屏代理层接管指针。
+   handle 可能被隐藏或随 MathJax 重排被替换，若只把 pointermove/up 绑在 handle 上，
+   Android WebView 一旦把滑动判定为画布滚动就会派发 pointercancel 使拖拽中断。 */
+let dragOverlay = null;
+
+function showDragOverlay() {
+  if (!dragOverlay) {
+    dragOverlay = document.createElement('div');
+    dragOverlay.id = 'drag-overlay';
+    document.body.appendChild(dragOverlay);
+  }
+  dragOverlay.style.display = 'block';
+}
+
+function hideDragOverlay() {
+  if (dragOverlay) dragOverlay.style.display = 'none';
+}
+
+function capturePointer(pointerId) {
+  try {
+    document.body.setPointerCapture(pointerId);
+    return document.body;
+  } catch (err) { return null; }
+}
+
+function releasePointer(captureEl, pointerId) {
+  if (!captureEl) return;
+  try { captureEl.releasePointerCapture(pointerId); } catch (err) {}
+}
+
+function activeDragFor(event) {
+  if (dragState && event.pointerId === dragState.pointerId) return 'card';
+  if (nodeDrag && event.pointerId === nodeDrag.pointerId) return 'node';
+  return null;
+}
+
+function onPointerMove(event) {
+  const kind = activeDragFor(event);
+  if (!kind) return;
+  event.preventDefault();
+  if (kind === 'card') moveDrag(event); else moveNodeDrag(event);
+}
+
+function onPointerEnd(event) {
+  const kind = activeDragFor(event);
+  if (!kind) return;
+  if (kind === 'card') endDrag(event); else endNodeDrag(event);
+}
+
+document.addEventListener('pointermove', onPointerMove, {passive: false});
+document.addEventListener('pointerup', onPointerEnd);
+document.addEventListener('pointercancel', onPointerEnd);
+
+function registerMeta(itemId, meta) {
+  const prefix = itemId + '__';
+  for (const key of Object.keys(nodeMeta)) {
+    if (key.indexOf(prefix) === 0) delete nodeMeta[key];
+  }
+  if (meta) Object.assign(nodeMeta, meta);
+}
+
+function unregisterMeta(itemId) {
+  const prefix = itemId + '__';
+  for (const key of Object.keys(nodeMeta)) {
+    if (key.indexOf(prefix) === 0) delete nodeMeta[key];
+  }
+}
+
+function colorToRgba(color, alpha) {
+  const m = color.match(/\d+/g);
+  if (!m || m.length < 3) return 'rgba(9,105,218,' + alpha + ')';
+  return 'rgba(' + m[0] + ',' + m[1] + ',' + m[2] + ',' + alpha + ')';
+}
+
+function hideSelection() {
+  document.getElementById('selection-box').style.display = 'none';
+  document.getElementById('selection-tag').style.display = 'none';
+  document.getElementById('node-handle').style.display = 'none';
+  document.getElementById('transform-button').style.display = 'none';
+}
+
+function clearSelection(notify) {
+  selectedId = null;
+  hideSelection();
+  if (notify && window.bridge && window.bridge.clear) {
+    try { window.bridge.clear(); } catch (err) {}
+  }
+}
+
+function installHitAreas(item) {
+  const svg = item.querySelector('svg');
+  if (!svg) return;
+  const viewBox = svg.viewBox.baseVal;
+  const svgRect = svg.getBoundingClientRect();
+  const unitsPerPx = (viewBox && svgRect.width) ? viewBox.width / svgRect.width : 1;
+  item.__unitsPerPx = unitsPerPx;
+  const pad = 5 * unitsPerPx;
+  const groups = Array.from(item.querySelectorAll('g[id]')).filter(function (group) {
+    return group.id.indexOf('__l') >= 0;
+  });
+  const boxes = [];
+  for (const group of groups) {
+    let box = null;
+    try { box = group.getBBox(); } catch (err) { box = null; }
+    boxes.push([group, box]);
+  }
+  for (const [group, box] of boxes) {
+    if (!box || !isFinite(box.width) || !isFinite(box.height)) continue;
+    if (box.width <= 0 || box.height <= 0) continue;
+    const area = {
+      x: box.x - pad, y: box.y - pad,
+      width: box.width + 2 * pad, height: box.height + 2 * pad
+    };
+    group.__hitBox = area;
+    group.__padPx = 5;
+    group.__unitsPerPx = unitsPerPx;
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('class', 'hit-area');
+    rect.setAttribute('x', area.x);
+    rect.setAttribute('y', area.y);
+    rect.setAttribute('width', area.width);
+    rect.setAttribute('height', area.height);
+    rect.setAttribute('fill', 'transparent');
+    rect.setAttribute('pointer-events', 'all');
+    group.insertBefore(rect, group.firstChild);
+  }
+}
+
+function setHover(group) {
+  if (group === hoverNode) return;
+  if (!group || !group.__hitBox) {
+    if (hoverRect) hoverRect.remove();
+    hoverNode = null;
+    return;
+  }
+  if (!hoverRect) {
+    hoverRect = document.createElementNS(SVG_NS, 'rect');
+    hoverRect.setAttribute('fill', '#000000');
+    hoverRect.setAttribute('fill-opacity', '0.08');
+    hoverRect.setAttribute('pointer-events', 'none');
+  }
+  const area = group.__hitBox;
+  hoverRect.setAttribute('x', area.x);
+  hoverRect.setAttribute('y', area.y);
+  hoverRect.setAttribute('width', area.width);
+  hoverRect.setAttribute('height', area.height);
+  hoverRect.setAttribute('rx', 4 * (group.__unitsPerPx || 1));
+  const first = group.firstChild;
+  const anchor = (first && first.classList && first.classList.contains('hit-area'))
+    ? first.nextSibling : first;
+  group.insertBefore(hoverRect, anchor);
+  hoverNode = group;
+}
+
+function actionForMo(mo) {
+  if (!mo) return null;
+  const item = mo.closest('.math-item');
+  if (!item) return null;
+  const addGroup = mo.closest('g[id*="__l"]');
+  const meta = addGroup ? nodeMeta[addGroup.id] : null;
+  if (meta && meta.type === 'Add') {
+    const use = mo.querySelector('use');
+    const code = use ? use.getAttribute('data-c') : null;
+    if (code === '2B' || code === '2212') {
+      const operators = Array.from(addGroup.querySelectorAll('g[data-mml-node="mo"]')).filter(function (node) {
+        if (node.closest('g[id*="__l"]') !== addGroup) return false;
+        const glyph = node.querySelector('use');
+        const value = glyph ? glyph.getAttribute('data-c') : null;
+        return value === '2B' || value === '2212';
+      });
+      const index = operators.indexOf(mo);
+      if (index >= 0) {
+        return {kind: 'swap', id: addGroup.id, index: index, item: item.dataset.id};
+      }
+    }
+  }
+  const wrapper = mo.parentElement;
+  if (wrapper) {
+    const inner = wrapper.querySelector(':scope > g[id*="__l"]');
+    const innerMeta = inner ? nodeMeta[inner.id] : null;
+    if (innerMeta && innerMeta.type === 'Add' && innerMeta.expandable) {
+      return {kind: 'expand', id: inner.id, index: -1, item: item.dataset.id};
+    }
+  }
+  return null;
+}
+
+function installActionAreas(item) {
+  const layer = item.querySelector('.action-layer');
+  if (!layer) return;
+  layer.textContent = '';
+  const layerRect = layer.getBoundingClientRect();
+  const pad = 8;
+  const mos = Array.from(item.querySelectorAll('g[data-mml-node="mo"]'));
+  const items = [];
+  for (const mo of mos) {
+    const action = actionForMo(mo);
+    if (!action) continue;
+    const rect = mo.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+    items.push([action, rect]);
+  }
+  for (const [action, rect] of items) {
+    const hit = document.createElement('div');
+    hit.className = 'action-hit';
+    hit.dataset.action = action.kind;
+    hit.dataset.item = action.item;
+    hit.dataset.node = action.id;
+    hit.dataset.index = action.index;
+    hit.style.left = (rect.left - layerRect.left - pad) + 'px';
+    hit.style.top = (rect.top - layerRect.top - pad) + 'px';
+    hit.style.width = (rect.width + 2 * pad) + 'px';
+    hit.style.height = (rect.height + 2 * pad) + 'px';
+    layer.appendChild(hit);
+  }
+}
+
+function interactiveAt(target) {
+  if (!target || !target.closest) return null;
+  const hit = target.closest('.action-hit');
+  if (hit) {
+    return {
+      kind: hit.dataset.action,
+      id: hit.dataset.node,
+      item: hit.dataset.item,
+      index: Number(hit.dataset.index),
+      rect: hit.getBoundingClientRect()
+    };
+  }
+  const mo = target.closest('g[data-mml-node="mo"]');
+  if (!mo || !mo.closest('.math-item')) return null;
+  const action = actionForMo(mo);
+  if (!action) return null;
+  action.rect = mo.getBoundingClientRect();
+  return action;
+}
+
+function showBadge(action) {
+  actionTarget = action;
+  badge.textContent = action.kind === 'swap' ? '⇄ 交换' : '⤢ 展开';
+  badge.style.display = 'block';
+  const rect = action.rect;
+  const width = badge.offsetWidth;
+  const height = badge.offsetHeight;
+  let left = rect.left + rect.width / 2 - width / 2;
+  left = Math.max(4, Math.min(left, window.innerWidth - width - 4));
+  let top = rect.top - height - 6;
+  if (top < 4) top = rect.bottom + 6;
+  badge.style.left = left + 'px';
+  badge.style.top = top + 'px';
+}
+
+function hideBadge() {
+  actionTarget = null;
+  badge.style.display = 'none';
+}
+
+function performAction(action) {
+  if (window.bridge) {
+    try {
+      if (action.kind === 'swap' && window.bridge.swap) {
+        window.bridge.swap(action.item, action.id, action.index);
+      } else if (action.kind === 'expand' && window.bridge.expand) {
+        window.bridge.expand(action.item, action.id);
+      }
+    } catch (err) {}
+  }
+  hideBadge();
+}
+
+function selectNode(group) {
+  const id = group.id;
+  const item = group.closest('.math-item');
+  const meta = nodeMeta[id] || {};
+  const padPx = group.__padPx || 0;
+  const raw = group.getBoundingClientRect();
+  const rect = {
+    left: raw.left + padPx, top: raw.top + padPx,
+    width: raw.width - 2 * padPx, height: raw.height - 2 * padPx
+  };
+  rect.right = rect.left + rect.width;
+  rect.bottom = rect.top + rect.height;
+  const color = getComputedStyle(group).color || '#0969da';
+  const box = document.getElementById('selection-box');
+  const tag = document.getElementById('selection-tag');
+  box.style.display = 'block';
+  box.style.left = (rect.left - 5) + 'px';
+  box.style.top = (rect.top - 5) + 'px';
+  box.style.width = (rect.width + 10) + 'px';
+  box.style.height = (rect.height + 10) + 'px';
+  box.style.borderColor = color;
+  box.style.background = colorToRgba(color, 0.08);
+  tag.style.display = 'block';
+  tag.style.color = color;
+  tag.textContent = (meta.type || '节点') + ' · 第 ' + (meta.depth === undefined ? '?' : meta.depth) + ' 层';
+  const above = rect.top - 28;
+  tag.style.left = Math.max(4, rect.left) + 'px';
+  tag.style.top = (above > 4 ? above : rect.bottom + 8) + 'px';
+  const nodeHandle = document.getElementById('node-handle');
+  nodeHandle.style.display = 'flex';
+  nodeHandle.style.left = (rect.left - 10) + 'px';
+  nodeHandle.style.top = (rect.top - 10) + 'px';
+  nodeHandle.style.borderColor = color;
+  nodeHandle.style.color = color;
+  const transformButton = document.getElementById('transform-button');
+  transformButton.style.display = 'flex';
+  transformButton.style.left = (rect.right - 10) + 'px';
+  transformButton.style.top = (rect.bottom - 10) + 'px';
+  transformButton.style.borderColor = color;
+  transformButton.style.color = color;
+  selectedId = id;
+  if (window.bridge && window.bridge.select) {
+    try { window.bridge.select(item ? item.dataset.id : '', id); } catch (err) {}
+  }
+}
+
+function selectById(id) {
+  const group = document.getElementById(id);
+  if (group) selectNode(group);
+}
+
+function buildGhost(group, svg, svgRect) {
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = svgRect.left + 'px';
+  wrapper.style.top = svgRect.top + 'px';
+  wrapper.style.width = svgRect.width + 'px';
+  wrapper.style.height = svgRect.height + 'px';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.zIndex = '40';
+  wrapper.style.opacity = '0.8';
+  const cloneSvg = document.createElementNS(SVG_NS, 'svg');
+  cloneSvg.setAttribute('viewBox', '0 0 ' + svgRect.width + ' ' + svgRect.height);
+  cloneSvg.setAttribute('width', svgRect.width);
+  cloneSvg.setAttribute('height', svgRect.height);
+  cloneSvg.setAttribute('fill', 'currentColor');
+  cloneSvg.style.overflow = 'visible';
+  const holder = document.createElementNS(SVG_NS, 'g');
+  const parent = group.parentElement;
+  const ctm = parent ? parent.getCTM() : null;
+  if (ctm) {
+    holder.setAttribute('transform', 'matrix(' + [ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f].join(',') + ')');
+  }
+  const clone = group.cloneNode(true);
+  const sourceGroups = [group].concat(Array.from(group.querySelectorAll('g[id]')));
+  const cloneGroups = [clone].concat(Array.from(clone.querySelectorAll('g[id]')));
+  for (let i = 0; i < sourceGroups.length; i += 1) {
+    const source = sourceGroups[i];
+    const target = cloneGroups[i];
+    if (!target) continue;
+    try { target.style.color = getComputedStyle(source).color; } catch (err) {}
+    if (target.id) target.removeAttribute('id');
+  }
+  clone.querySelectorAll('.hit-area').forEach(function (rect) { rect.remove(); });
+  holder.appendChild(clone);
+  cloneSvg.appendChild(holder);
+  wrapper.appendChild(cloneSvg);
+  return wrapper;
+}
+
+function startNodeDrag(event) {
+  if (event.button !== 0 || !selectedId || dragState || nodeDrag) return;
+  const group = document.getElementById(selectedId);
+  if (!group) return;
+  const item = group.closest('.math-item');
+  const svg = group.closest('svg');
+  if (!item || !svg) return;
+  event.preventDefault();
+  event.stopPropagation();
+  setHover(null);
+  hideBadge();
+  const svgRect = svg.getBoundingClientRect();
+  const nodeRect = group.getBoundingClientRect();
+  const ghost = buildGhost(group, svg, svgRect);
+  document.body.appendChild(ghost);
+  const nodeCaptureEl = capturePointer(event.pointerId);
+  nodeDrag = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    dx: 0,
+    dy: 0,
+    moved: false,
+    groupRect: nodeRect,
+    ghost: ghost,
+    ghostBaseLeft: svgRect.left,
+    ghostBaseTop: svgRect.top,
+    itemId: item.dataset.id,
+    nodeId: selectedId,
+    captureEl: nodeCaptureEl
+  };
+  showDragOverlay();
+}
+
+function moveNodeDrag(event) {
+  if (!nodeDrag) return;
+  const dx = event.clientX - nodeDrag.startX;
+  const dy = event.clientY - nodeDrag.startY;
+  nodeDrag.dx = dx;
+  nodeDrag.dy = dy;
+  if (Math.abs(dx) + Math.abs(dy) > 3) nodeDrag.moved = true;
+  nodeDrag.ghost.style.left = (nodeDrag.ghostBaseLeft + dx) + 'px';
+  nodeDrag.ghost.style.top = (nodeDrag.ghostBaseTop + dy) + 'px';
+}
+
+function endNodeDrag(event) {
+  if (!nodeDrag) return;
+  const state = nodeDrag;
+  nodeDrag = null;
+  state.ghost.remove();
+  hideDragOverlay();
+  releasePointer(state.captureEl, state.pointerId);
+  if (!state.moved) return;
+  suppressClickUntil = Date.now() + 300;
+  const rect = {
+    left: state.groupRect.left + state.dx,
+    top: state.groupRect.top + state.dy,
+    right: state.groupRect.right + state.dx,
+    bottom: state.groupRect.bottom + state.dy
+  };
+  let target = null;
+  let bestArea = 0;
+  for (const item of canvas.querySelectorAll('.math-item')) {
+    const r = item.getBoundingClientRect();
+    const width = Math.min(rect.right, r.right) - Math.max(rect.left, r.left);
+    const height = Math.min(rect.bottom, r.bottom) - Math.max(rect.top, r.top);
+    if (width > 0 && height > 0) {
+      const area = width * height;
+      if (area > bestArea) {
+        bestArea = area;
+        target = item;
+      }
+    }
+  }
+  if (target && window.bridge && window.bridge.dropNode) {
+    try { window.bridge.dropNode(state.itemId, state.nodeId, target.dataset.id); } catch (err) {}
+  }
+}
+
+function updateEmptyHint() {
+  const hint = document.getElementById('empty-hint');
+  if (!hint) return;
+  hint.style.display = canvas.querySelector('.math-item') ? 'none' : 'block';
+}
+
+function overlapArea(a, b, gap) {
+  const width = Math.min(a.right + gap, b.right) - Math.max(a.left - gap, b.left);
+  const height = Math.min(a.bottom + gap, b.bottom) - Math.max(a.top - gap, b.top);
+  return (width > 0 && height > 0) ? width * height : 0;
+}
+
+function overlappingItems(rect, item, gap) {
+  const result = [];
+  for (const other of canvas.querySelectorAll('.math-item')) {
+    if (other === item) continue;
+    const area = overlapArea(rect, other.getBoundingClientRect(), gap);
+    if (area > 0) result.push({item: other, area: area});
+  }
+  result.sort(function (a, b) { return b.area - a.area; });
+  return result;
+}
+
+function itemsOverlap(rect, item, gap) {
+  return overlappingItems(rect, item, gap).length > 0;
+}
+
+function findFreeSpot(item) {
+  const width = item.offsetWidth;
+  const height = item.offsetHeight;
+  const maxX = Math.max(24, canvas.clientWidth - width - 24);
+  const maxY = Math.max(24, canvas.clientHeight - height - 24);
+  for (let y = 24; y <= maxY; y += 40) {
+    for (let x = 24; x <= maxX; x += 40) {
+      item.style.left = x + 'px';
+      item.style.top = y + 'px';
+      if (!itemsOverlap(item.getBoundingClientRect(), item, 12)) return {x: x, y: y};
+    }
+  }
+  return {x: 24, y: 24};
+}
+
+function createItemElement(data) {
+  const item = document.createElement('div');
+  item.className = 'math-item';
+  item.dataset.id = data.id;
+  item.dataset.kind = data.kind || 'expression';
+
+  const handle = document.createElement('div');
+  handle.className = 'drag-handle';
+  handle.textContent = '⠿';
+  handle.title = '拖拽移动（第 0 层）';
+  handle.addEventListener('pointerdown', startDrag);
+  handle.addEventListener('click', function (event) { event.stopPropagation(); });
+
+  const content = document.createElement('div');
+  content.className = 'item-content';
+  content.textContent = '$$' + data.latex + '$$';
+
+  const layer = document.createElement('div');
+  layer.className = 'action-layer';
+
+  const actions = document.createElement('div');
+  actions.className = 'card-actions';
+  const copyButton = document.createElement('button');
+  copyButton.type = 'button';
+  copyButton.className = 'card-button';
+  copyButton.textContent = '复制';
+  copyButton.title = '复制这张卡片';
+  copyButton.addEventListener('click', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (window.bridge && window.bridge.copyItem) {
+      try { window.bridge.copyItem(item.dataset.id); } catch (err) {}
+    }
+  });
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'card-button delete';
+  deleteButton.textContent = '删除';
+  deleteButton.title = '删除这张卡片';
+  deleteButton.addEventListener('click', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (window.bridge && window.bridge.deleteItem) {
+      try { window.bridge.deleteItem(item.dataset.id); } catch (err) {}
+    }
+  });
+  actions.append(copyButton, deleteButton);
+
+  item.append(handle, content, layer, actions);
+  if (data.note) {
+    const note = document.createElement('div');
+    note.className = 'card-note';
+    note.textContent = data.note;
+    item.appendChild(note);
+  }
+  return item;
+}
+
+function typesetItem(item) {
+  const content = item.querySelector('.item-content');
+  return MathJax.startup.promise.then(function () {
+    return MathJax.typesetPromise([content]);
+  });
+}
+
+async function addItem(data) {
+  const item = createItemElement(data);
+  item.style.left = '24px';
+  item.style.top = '24px';
+  canvas.appendChild(item);
+  registerMeta(data.id, data.meta);
+  try {
+    await typesetItem(item);
+    installHitAreas(item);
+    installActionAreas(item);
+  } catch (err) {
+    const content = item.querySelector('.item-content');
+    content.classList.add('error');
+    content.textContent = String(err);
+  }
+  const pos = findFreeSpot(item);
+  updateEmptyHint();
+  try { item.scrollIntoView({block: 'nearest', inline: 'nearest'}); } catch (err) {}
+  if (window.bridge && window.bridge.placeItem) {
+    try { window.bridge.placeItem(data.id, pos.x, pos.y); } catch (err) {}
+  }
+}
+
+async function updateItem(itemId, source, meta, selectId, kind, note) {
+  const item = Array.from(canvas.querySelectorAll('.math-item')).find(function (el) {
+    return el.dataset.id === itemId;
+  });
+  if (!item) return;
+  clearSelection(false);
+  setHover(null);
+  hideBadge();
+  registerMeta(itemId, meta);
+  item.dataset.kind = kind || 'expression';
+  let noteElement = item.querySelector('.card-note');
+  if (note) {
+    if (!noteElement) {
+      noteElement = document.createElement('div');
+      noteElement.className = 'card-note';
+      item.appendChild(noteElement);
+    }
+    noteElement.textContent = note;
+  } else if (noteElement) {
+    noteElement.remove();
+  }
+  const content = item.querySelector('.item-content');
+  content.classList.remove('error');
+  content.textContent = '$$' + source + '$$';
+  try {
+    await typesetItem(item);
+    item.querySelectorAll('.hit-area').forEach(function (rect) { rect.remove(); });
+    installHitAreas(item);
+    installActionAreas(item);
+    if (selectId) selectById(selectId);
+  } catch (err) {
+    content.classList.add('error');
+    content.textContent = String(err);
+  }
+}
+
+async function setCanvas(items) {
+  clearCanvas();
+  for (const data of items) {
+    const item = createItemElement(data);
+    item.style.left = (data.x || 0) + 'px';
+    item.style.top = (data.y || 0) + 'px';
+    canvas.appendChild(item);
+    registerMeta(data.id, data.meta);
+    try {
+      await typesetItem(item);
+      installHitAreas(item);
+      installActionAreas(item);
+    } catch (err) {
+      const content = item.querySelector('.item-content');
+      content.classList.add('error');
+      content.textContent = String(err);
+    }
+  }
+  updateEmptyHint();
+}
+
+function clearCanvas() {
+  clearSelection(false);
+  setHover(null);
+  hideBadge();
+  canvas.querySelectorAll('.math-item').forEach(function (item) { item.remove(); });
+  nodeMeta = {};
+  updateEmptyHint();
+}
+
+function removeItem(itemId) {
+  const item = Array.from(canvas.querySelectorAll('.math-item')).find(function (el) {
+    return el.dataset.id === itemId;
+  });
+  if (!item) return;
+  if (selectedId && selectedId.indexOf(itemId + '__') === 0) clearSelection(false);
+  unregisterMeta(itemId);
+  item.remove();
+  updateEmptyHint();
+}
+
+function startDrag(event) {
+  if (event.button !== 0 || dragState || nodeDrag) return;
+  const item = event.currentTarget.closest('.math-item');
+  if (!item) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const cardCaptureEl = capturePointer(event.pointerId);
+  dragState = {
+    item: item,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    originLeft: parseFloat(item.style.left) || 0,
+    originTop: parseFloat(item.style.top) || 0,
+    moved: false,
+    captureEl: cardCaptureEl
+  };
+  item.classList.add('dragging');
+  item.style.zIndex = 9;
+  showDragOverlay();
+  clearSelection(false);
+  setHover(null);
+  hideBadge();
+}
+
+function moveDrag(event) {
+  if (!dragState) return;
+  const dx = event.clientX - dragState.startX;
+  const dy = event.clientY - dragState.startY;
+  if (Math.abs(dx) + Math.abs(dy) > 3) dragState.moved = true;
+  const item = dragState.item;
+  let left = dragState.originLeft + dx;
+  let top = dragState.originTop + dy;
+  left = Math.max(0, Math.min(left, canvas.clientWidth - item.offsetWidth));
+  top = Math.max(0, Math.min(top, canvas.clientHeight - item.offsetHeight));
+  item.style.left = left + 'px';
+  item.style.top = top + 'px';
+}
+
+function endDrag(event) {
+  if (!dragState) return;
+  const state = dragState;
+  dragState = null;
+  const item = state.item;
+  item.classList.remove('dragging');
+  item.style.zIndex = '';
+  hideDragOverlay();
+  releasePointer(state.captureEl, state.pointerId);
+  if (!state.moved) return;
+  suppressClickUntil = Date.now() + 300;
+  const rect = item.getBoundingClientRect();
+  const overlaps = overlappingItems(rect, item, 8);
+  if (overlaps.length > 0) {
+    item.style.left = state.originLeft + 'px';
+    item.style.top = state.originTop + 'px';
+    item.classList.add('collision');
+    setTimeout(function () { item.classList.remove('collision'); }, 450);
+    const equationPair = overlaps.find(function (entry) {
+      return item.dataset.kind === 'equation' && entry.item.dataset.kind === 'equation';
+    });
+    if (equationPair && window.bridge && window.bridge.openSystem) {
+      try {
+        window.bridge.openSystem(item.dataset.id, equationPair.item.dataset.id);
+      } catch (err) {}
+    }
+    return;
+  }
+  if (window.bridge && window.bridge.moveItem) {
+    try {
+      window.bridge.moveItem(
+        item.dataset.id,
+        parseFloat(item.style.left) || 0,
+        parseFloat(item.style.top) || 0
+      );
+    } catch (err) {}
+  }
+}
+
+document.addEventListener('click', function (event) {
+  if (window.MathKeyboard && MathKeyboard.isOpen && MathKeyboard.isOpen()) return;
+  if (Date.now() < suppressClickUntil) return;
+  if (!document.getElementById('dlg-mask').classList.contains('hidden')) return;
+  if (badge.contains(event.target)) return;
+  if (event.target.closest && event.target.closest('#toolbar')) return;
+  const action = interactiveAt(event.target);
+  if (action) {
+    performAction(action);
+    return;
+  }
+  const target = event.target;
+  const group = target && target.closest ? target.closest('g[id*="__l"]') : null;
+  if (group) {
+    selectNode(group);
+  } else {
+    clearSelection(true);
+  }
+});
+document.addEventListener('mousemove', function (event) {
+  if (window.MathKeyboard && MathKeyboard.isOpen && MathKeyboard.isOpen()) return;
+  if (dragState || nodeDrag) return;
+  if (!document.getElementById('dlg-mask').classList.contains('hidden')) return;
+  if (badge.contains(event.target)) return;
+  const action = interactiveAt(event.target);
+  if (action) {
+    const group = document.getElementById(action.id);
+    if (group) setHover(group);
+    showBadge(action);
+    return;
+  }
+  hideBadge();
+  const target = event.target;
+  const group = target && target.closest ? target.closest('g[id*="__l"]') : null;
+  setHover(group);
+});
+document.addEventListener('mouseout', function (event) {
+  if (!event.relatedTarget) {
+    setHover(null);
+    hideBadge();
+  }
+});
+window.addEventListener('scroll', function () {
+  if (window.MathKeyboard && MathKeyboard.isOpen && MathKeyboard.isOpen()) return;
+  if (dragState || nodeDrag) return;
+  hideSelection();
+  hideBadge();
+}, true);
+window.addEventListener('resize', function () {
+  if (window.MathKeyboard && MathKeyboard.isOpen && MathKeyboard.isOpen()) return;
+  if (selectedId) selectById(selectedId);
+});
+badge.addEventListener('click', function (event) {
+  event.stopPropagation();
+  if (actionTarget) performAction(actionTarget);
+});
+const transformButton = document.getElementById('transform-button');
+transformButton.addEventListener('click', function (event) {
+  event.stopPropagation();
+  if (!selectedId) return;
+  const group = document.getElementById(selectedId);
+  const item = group ? group.closest('.math-item') : null;
+  if (item && window.bridge && window.bridge.transform) {
+    try { window.bridge.transform(item.dataset.id, selectedId); } catch (err) {}
+  }
+});
+const nodeHandle = document.getElementById('node-handle');
+nodeHandle.addEventListener('pointerdown', startNodeDrag);
+nodeHandle.addEventListener('click', function (event) { event.stopPropagation(); });
+
+function setupBridge() {
+  var make = function (action) {
+    return function () {
+      var args = Array.prototype.slice.call(arguments);
+      if (window.AndroidBridge && window.AndroidBridge.canvas) {
+        window.AndroidBridge.canvas(JSON.stringify({action: action, args: args}));
+      }
+    };
+  };
+  window.bridge = {
+    clear: make('clear'), select: make('select'), swap: make('swap'),
+    expand: make('expand'), moveItem: make('moveItem'), placeItem: make('placeItem'),
+    dropNode: make('dropNode'), transform: make('transform'),
+    copyItem: make('copyItem'), deleteItem: make('deleteItem'),
+    openSystem: make('openSystem')
+  };
+}
+
+function refreshHitAreas() {
+  hideBadge();
+  setHover(null);
+  canvas.querySelectorAll('.math-item').forEach(function (item) {
+    item.querySelectorAll('.hit-area').forEach(function (rect) { rect.remove(); });
+    installHitAreas(item);
+    installActionAreas(item);
+  });
+  if (selectedId) selectById(selectedId);
+}
+
+const sizeSlider = document.getElementById('size-slider');
+const sizeValue = document.getElementById('size-value');
+sizeSlider.addEventListener('input', function () {
+  const px = Number(sizeSlider.value);
+  sizeValue.textContent = px + 'px';
+  canvas.style.fontSize = px + 'px';
+  refreshHitAreas();
+});
+
+setupBridge();
+updateEmptyHint();
+</script>
+<script src="../mathkeyboard.js"></script>
+<script src="extra.js"></script>
+</body>
+</html>

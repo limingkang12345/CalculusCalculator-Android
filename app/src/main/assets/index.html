@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>功能集成</title>
+    <link rel="stylesheet" href="mathlive/dist/mathlive-static.css">
+    <link rel="stylesheet" href="mathkeyboard.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>功能集成</h1>
+        <p class="sub">安卓离线版 · 内嵌 Python + SymPy</p>
+    </header>
+
+    <main>
+
+        <!-- ============ 功能集成（对齐桌面版 functions.ui：定义区 / 计算区 / 绘图区） ============ -->
+        <section id="panel-fp" class="panel">
+            <div class="fp-block">
+                <h3>定义区</h3>
+                <label class="lbl">类型</label>
+                <select id="fpDefType"></select>
+                <div id="fpDefRows" class="fields"></div>
+                <div class="fp-btns">
+                    <button id="fpDefSave">保存输入</button>
+                    <button id="fpDefClear">清空输入</button>
+                </div>
+                <label class="lbl">预览模式</label>
+                <select id="fpDefMode">
+                    <option value="0">直接模式(不自动替换表达式中的自定义函数)</option>
+                    <option value="1">替换模式(自动替换表达式中的自定义函数)</option>
+                </select>
+                <button id="fpDefPreview">预览</button>
+                <pre id="fpDefOutput"></pre>
+                <label class="lbl">对象 / 属性（点击选中）</label>
+                <div id="fpDefTree" class="fp-tree"></div>
+                <div class="fp-btns">
+                    <button id="fpDefEdit">编辑定义</button>
+                    <button id="fpDefDel">删除定义</button>
+                </div>
+            </div>
+
+            <div class="fp-block">
+                <h3>计算区</h3>
+                <label class="lbl">计算功能</label>
+                <select id="fpCalcFunc"></select>
+                <div id="fpCalcRows" class="fields"></div>
+                <div class="fp-btns">
+                    <button id="fpCalcGo" class="primary">计 算</button>
+                    <button id="fpCalcClear">清空</button>
+                </div>
+                <label class="lbl">保存为（填名称后本次结果存为函数）</label>
+                <div class="kbd-field-row">
+                    <input id="fpSaveAs" placeholder="留空表示不保存">
+                    <button type="button" class="kbd-open" data-kbd="fpSaveAs" title="数学键盘">∑</button>
+                </div>
+                <pre id="fpCalcOutput"></pre>
+            </div>
+
+            <div class="fp-block">
+                <h3>绘图区</h3>
+                <label class="lbl">绘图模式</label>
+                <select id="fpDrawMode"></select>
+                <div id="fpDrawObjs" class="fp-checks"></div>
+                <button id="fpDrawGo" class="primary">绘 制</button>
+                <div id="fpDrawWrap" class="hidden"><img id="fpDrawImg" alt="draw"></div>
+            </div>
+
+            <section id="fpResult" class="hidden">
+                <div id="fpImgWrap" class="hidden"><img id="fpResImg" alt="result"></div>
+                <pre id="fpLatex"></pre>
+                <pre id="fpText"></pre>
+                <pre id="fpError" class="err hidden"></pre>
+            </section>
+        </section>
+
+        <section id="loading" class="hidden">计算中…</section>
+
+        <section id="result" class="hidden">
+            <div id="plotWrap" class="hidden"><img id="plotImg" alt="plot"></div>
+            <div id="imgWrap" class="hidden"><img id="resImg" alt="result"></div>
+            <pre id="latex"></pre>
+            <pre id="text"></pre>
+            <pre id="error" class="err hidden"></pre>
+        </section>
+    </main>
+
+    <script src="mathlive/dist/mathlive.min.js"></script>
+    <script src="mathkeyboard.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

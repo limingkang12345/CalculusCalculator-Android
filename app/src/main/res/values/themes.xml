@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.CalculusCalculator" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/purple</item>
+        <item name="android:navigationBarColor">@color/black</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

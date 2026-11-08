@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ic_launcher_background">
+
+    <!-- 顶部三大功能切换：功能集成 / 积木编辑器 / 解几计算器 -->
+    <LinearLayout
+        android:id="@+id/tabBar"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:orientation="horizontal"
+        android:background="#7A45C4">
+
+        <Button
+            android:id="@+id/tabCalc"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="@string/tab_calc"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:background="?android:attr/selectableItemBackground" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="#55FFFFFF" />
+
+        <Button
+            android:id="@+id/tabBlockly"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="@string/tab_blockly"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:background="?android:attr/selectableItemBackground" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="#55FFFFFF" />
+
+        <Button
+            android:id="@+id/tabExpr"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="@string/tab_expr"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:background="?android:attr/selectableItemBackground" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- 功能集成（微积分 / 几何 / 表达式树） -->
+        <WebView
+            android:id="@+id/webView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- 积木编辑器（切换时才加载） -->
+        <WebView
+            android:id="@+id/blocklyWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <!-- 解几计算器 / 表达式画布（切换时才加载） -->
+        <WebView
+            android:id="@+id/exprWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_gravity="top"
+            android:max="100"
+            android:progress="0"
+            android:indeterminate="false"
+            android:visibility="gone" />
+
+    </FrameLayout>
+
+</LinearLayout>

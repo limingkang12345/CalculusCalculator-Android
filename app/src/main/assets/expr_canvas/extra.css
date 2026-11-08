@@ -1,0 +1,136 @@
+.hidden { display: none !important; }
+
+body { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+
+#canvas-wrap { top: 130px !important; bottom: 112px !important; }
+#toolbar { top: 84px !important; right: 10px !important; padding: 3px 9px !important; }
+#size-slider { width: 92px !important; }
+
+#appbar {
+  position: fixed; left: 0; right: 0; top: 0; height: 48px; z-index: 40;
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  box-sizing: border-box; background: #f6f8fa; border-bottom: 1px solid #d0d7de;
+}
+#expr-row { flex: 1 1 auto; min-width: 0; position: relative; }
+#expr-row > input {
+  display: block; width: 100%; height: 34px; box-sizing: border-box;
+  border: 1px solid #d0d7de; border-radius: 6px; padding: 0 40px 0 8px; font-size: 14px;
+  background: #fff; color: #1f2328;
+}
+#expr-input:focus { outline: none; border-color: #0969da; }
+#count { font-size: 11px; color: #57606a; white-space: nowrap; }
+
+.btn {
+  flex: 0 0 auto; height: 32px; padding: 0 10px; border-radius: 6px;
+  border: 1px solid #d0d7de; background: #fff; color: #24292f;
+  font: 13px/1 "Microsoft YaHei", sans-serif; cursor: pointer; white-space: nowrap;
+}
+.btn:active { background: #eaeef2; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: #7a45c4; border-color: #7a45c4; color: #fff; }
+.btn.primary:active { background: #6637ab; }
+#appbar .kbd-open { width: 28px; height: 28px; right: 4px; font-size: 16px; }
+
+#helpbar {
+  position: fixed; left: 0; right: 0; top: 48px; height: 30px; z-index: 39;
+  box-sizing: border-box; padding: 6px 10px; font-size: 11px; color: #57606a;
+  background: #fff; border-bottom: 1px solid #eaeef2; overflow: hidden; white-space: nowrap;
+}
+#detailbar {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 110px; z-index: 41;
+  box-sizing: border-box; padding: 6px 10px; background: #f6f8fa;
+  border-top: 1px solid #d0d7de; overflow: auto;
+}
+#sel-info { font-size: 12px; color: #24292f; margin-bottom: 3px; }
+#detail {
+  margin: 0; font: 11px/1.5 Consolas, Menlo, monospace; color: #57606a;
+  white-space: pre-wrap; word-break: break-all;
+}
+#status { font-size: 11px; color: #0969da; margin-top: 3px; min-height: 14px; }
+
+#dlg-mask {
+  position: fixed; inset: 0; z-index: 100; display: flex;
+  align-items: center; justify-content: center; padding: 16px;
+  box-sizing: border-box; background: rgba(27, 31, 36, .45);
+}
+#dlg {
+  width: min(94vw, 560px); max-height: 86vh; overflow: auto;
+  background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.22);
+  padding: 14px 16px; box-sizing: border-box; color: #1f2328;
+}
+#dlg-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+#dlg-body label { display: block; font-size: 12px; color: #57606a; margin: 10px 0 4px; }
+#dlg-body select, #dlg-body input[type=text] {
+  width: 100%; box-sizing: border-box; height: 34px; padding: 0 8px;
+  border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; background: #fff; color: #1f2328;
+}
+#dlg-body .dlg-node {
+  font-size: 12px; color: #24292f; background: #f6f8fa;
+  border: 1px solid #eaeef2; border-radius: 6px; padding: 7px 9px;
+  word-break: break-all; line-height: 1.6;
+}
+#dlg-body .dlg-note { font-size: 11px; color: #8c959f; margin-top: 6px; line-height: 1.6; }
+#dlg-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+#dlg-foot .btn:disabled { opacity: .45; cursor: default; }
+#dlg-body .kbd-field-row { margin-top: 2px; }
+
+/* 拖拽节点对话框：可点选的分层着色公式 + 互斥操作按钮（对齐桌面版 ExpressionDialog） */
+#dlg-body .dlg-formula-box {
+  max-height: 30vh; overflow: auto; -webkit-overflow-scrolling: touch;
+  background: #fafbfc; border: 1px solid #eaeef2; border-radius: 8px;
+  padding: 6px; text-align: center;
+}
+#dlg-formula { font-size: 24px; color: #1f2328; padding: 10px 4px; line-height: 1.4; }
+#dlg-formula svg { color: #1f2328; max-width: 100%; }
+#dlg-formula.error {
+  color: #cf222e; font: 13px/1.6 "Microsoft YaHei", sans-serif;
+  text-align: left; white-space: pre-wrap; word-break: break-all;
+}
+#dlg-sel-box {
+  position: fixed; display: none; pointer-events: none; z-index: 110;
+  border: 1.5px dashed #0969da; border-radius: 6px; box-sizing: border-box;
+}
+#dlg-body .dlg-src {
+  font-size: 12px; color: #24292f; background: #f6f8fa;
+  border: 1px solid #eaeef2; border-radius: 6px;
+  padding: 6px 9px; margin-top: 8px; line-height: 1.6; word-break: break-all;
+}
+#dlg-body .dlg-selinfo {
+  font-size: 12px; color: #1f2328; margin-top: 9px;
+  line-height: 1.6; word-break: break-all;
+}
+#dlg-body .dlg-hint { font-size: 11px; color: #57606a; margin-top: 3px; }
+#dlg-body .dlg-ops-group { margin-top: 10px; }
+#dlg-body .dlg-ops-title {
+  font-size: 12px; font-weight: 700; color: #57606a; margin-bottom: 5px;
+}
+#dlg-body .dlg-ops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#dlg-body .dlg-op {
+  height: 34px; padding: 0 4px; border: 1px solid #d0d7de; border-radius: 6px;
+  background: #f6f8fa; color: #24292f; font: 12px/1 "Microsoft YaHei", sans-serif;
+  cursor: pointer; touch-action: manipulation;
+  -webkit-user-select: none; user-select: none;
+}
+#dlg-body .dlg-op:disabled { color: #8c959f; background: #fff; cursor: default; }
+#dlg-body .dlg-op.active {
+  background: #ddf4ff; border-color: #0969da; color: #0969da; font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ */
+/* 触摸拖拽：touch-action:none 阻止 Android WebView 把拖拽判成画布滚动，   */
+/* 这是 pointercancel 频繁触发、拖拽「断触」的根因。                      */
+/* ------------------------------------------------------------------ */
+.drag-handle, #node-handle, #drag-overlay {
+  touch-action: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+/* 扩大触摸命中区，视觉尺寸保持不变 */
+.drag-handle::after, #node-handle::after {
+  content: ''; position: absolute; inset: -8px; border-radius: 50%;
+}
+#node-handle::after { inset: -10px; }
+#drag-overlay {
+  position: fixed; inset: 0; z-index: 90; display: none;
+  background: transparent; touch-action: none;
+}
