@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="icon" href="../favicon.ico">
 <script>window.MathJax = {
   tex: {displayMath: [['$$', '$$']]},
   svg: {fontCache: 'local'},
@@ -150,7 +151,11 @@
   <button id="redo-btn" class="btn" disabled>重做</button>
   <span id="count">0 个表达式</span>
 </div>
-<div id="helpbar">拖拽左上角红圈移动 · 点击 +/− 交换相邻项 · 点击括号展开 · 点击节点查看结构</div>
+<div id="helpbar">
+  <button id="common-btn" class="btn tiny">常用方程</button>
+  <button id="geometry-btn" class="btn tiny">几何计算</button>
+  <span class="help-tip">拖拽左上角红圈移动 · 点击 +/− 交换相邻项 · 节点拖到空白处生成新卡片</span>
+</div>
 <div id="detailbar">
   <div id="sel-info">未选中节点</div>
   <pre id="detail">点击画布中的节点，查看其自定义结构与 SymPy 表达式</pre>
@@ -280,6 +285,9 @@ function hideSelection() {
 function clearSelection(notify) {
   selectedId = null;
   hideSelection();
+  canvas.querySelectorAll('.math-item.selected').forEach(function (el) {
+    el.classList.remove('selected');
+  });
   if (notify && window.bridge && window.bridge.clear) {
     try { window.bridge.clear(); } catch (err) {}
   }
@@ -632,6 +640,13 @@ function endNodeDrag(event) {
   }
   if (target && window.bridge && window.bridge.dropNode) {
     try { window.bridge.dropNode(state.itemId, state.nodeId, target.dataset.id); } catch (err) {}
+  } else if (!target && window.bridge && window.bridge.dropNodeOnCanvas) {
+    const canvasRect = canvas.getBoundingClientRect();
+    const x = Math.max(24, rect.left - canvasRect.left);
+    const y = Math.max(24, rect.top - canvasRect.top);
+    try {
+      window.bridge.dropNodeOnCanvas(state.itemId, state.nodeId, x, y);
+    } catch (err) {}
   }
 }
 
@@ -680,6 +695,7 @@ function findFreeSpot(item) {
 function createItemElement(data) {
   const item = document.createElement('div');
   item.className = 'math-item';
+  if (data.collapsed) item.classList.add('collapsed');
   item.dataset.id = data.id;
   item.dataset.kind = data.kind || 'expression';
 
@@ -689,6 +705,43 @@ function createItemElement(data) {
   handle.title = '拖拽移动（第 0 层）';
   handle.addEventListener('pointerdown', startDrag);
   handle.addEventListener('click', function (event) { event.stopPropagation(); });
+
+  const title = document.createElement('div');
+  title.className = 'card-title';
+  title.textContent = data.title || '双击加标题';
+  title.classList.toggle('empty', !data.title);
+  title.title = '双击编辑标题';
+  title.addEventListener('dblclick', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const old = data.title || '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'card-title-input';
+    input.value = old;
+    title.textContent = '';
+    title.appendChild(input);
+    input.focus();
+    let done = false;
+    const finish = function (save) {
+      if (done) return;
+      done = true;
+      const value = save ? input.value.trim() : old;
+      data.title = value;
+      title.textContent = value || '双击加标题';
+      title.classList.toggle('empty', !value);
+      if (save && window.bridge && window.bridge.setTitle) {
+        try { window.bridge.setTitle(item.dataset.id, value); } catch (err) {}
+      }
+    };
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', function () { finish(true); });
+    input.addEventListener('click', function (e) { e.stopPropagation(); });
+    input.addEventListener('dblclick', function (e) { e.stopPropagation(); });
+  });
 
   const content = document.createElement('div');
   content.className = 'item-content';
@@ -723,15 +776,45 @@ function createItemElement(data) {
       try { window.bridge.deleteItem(item.dataset.id); } catch (err) {}
     }
   });
-  actions.append(copyButton, deleteButton);
+  const infoButton = document.createElement('button');
+  infoButton.type = 'button';
+  infoButton.className = 'card-button';
+  infoButton.textContent = '信息';
+  infoButton.title = '查看卡片属性与取值范围';
+  infoButton.addEventListener('click', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (window.bridge && window.bridge.selectCard) {
+      try { window.bridge.selectCard(item.dataset.id); } catch (err) {}
+    }
+  });
+  const collapseButton = document.createElement('button');
+  collapseButton.type = 'button';
+  collapseButton.className = 'card-button collapse';
+  collapseButton.textContent = data.collapsed ? '展开' : '折叠';
+  collapseButton.title = '折叠 / 展开卡片';
+  collapseButton.addEventListener('click', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const collapsed = !item.classList.contains('collapsed');
+    item.classList.toggle('collapsed', collapsed);
+    collapseButton.textContent = collapsed ? '展开' : '折叠';
+    if (window.bridge && window.bridge.setCollapsed) {
+      try { window.bridge.setCollapsed(item.dataset.id, collapsed); } catch (err) {}
+    }
+    setTimeout(function () { refreshHitAreas(); }, 30);
+  });
+  actions.append(copyButton, deleteButton, infoButton, collapseButton);
 
-  item.append(handle, content, layer, actions);
+  item.append(handle, title, content, layer);
   if (data.note) {
     const note = document.createElement('div');
     note.className = 'card-note';
     note.textContent = data.note;
     item.appendChild(note);
   }
+  item.appendChild(actions);
+  item.dataset.source = data.latex || '';
   return item;
 }
 
@@ -744,8 +827,11 @@ function typesetItem(item) {
 
 async function addItem(data) {
   const item = createItemElement(data);
-  item.style.left = '24px';
-  item.style.top = '24px';
+  const pinned = typeof data.x === 'number' && typeof data.y === 'number';
+  const startX = pinned ? data.x : 24;
+  const startY = pinned ? data.y : 24;
+  item.style.left = startX + 'px';
+  item.style.top = startY + 'px';
   canvas.appendChild(item);
   registerMeta(data.id, data.meta);
   try {
@@ -757,7 +843,7 @@ async function addItem(data) {
     content.classList.add('error');
     content.textContent = String(err);
   }
-  const pos = findFreeSpot(item);
+  const pos = pinned ? {x: startX, y: startY} : findFreeSpot(item);
   updateEmptyHint();
   try { item.scrollIntoView({block: 'nearest', inline: 'nearest'}); } catch (err) {}
   if (window.bridge && window.bridge.placeItem) {
@@ -780,12 +866,15 @@ async function updateItem(itemId, source, meta, selectId, kind, note) {
     if (!noteElement) {
       noteElement = document.createElement('div');
       noteElement.className = 'card-note';
-      item.appendChild(noteElement);
+      const actions = item.querySelector('.card-actions');
+      if (actions) item.insertBefore(noteElement, actions);
+      else item.appendChild(noteElement);
     }
     noteElement.textContent = note;
   } else if (noteElement) {
     noteElement.remove();
   }
+  item.dataset.source = source;
   const content = item.querySelector('.item-content');
   content.classList.remove('error');
   content.textContent = '$$' + source + '$$';
@@ -906,6 +995,15 @@ function endDrag(event) {
       try {
         window.bridge.openSystem(item.dataset.id, equationPair.item.dataset.id);
       } catch (err) {}
+      return;
+    }
+    const expressionPair = overlaps.find(function (entry) {
+      return item.dataset.kind === 'expression' && entry.item.dataset.kind === 'expression';
+    });
+    if (expressionPair && window.bridge && window.bridge.openExpressionPair) {
+      try {
+        window.bridge.openExpressionPair(item.dataset.id, expressionPair.item.dataset.id);
+      } catch (err) {}
     }
     return;
   }
@@ -990,13 +1088,26 @@ const nodeHandle = document.getElementById('node-handle');
 nodeHandle.addEventListener('pointerdown', startNodeDrag);
 nodeHandle.addEventListener('click', function (event) { event.stopPropagation(); });
 
+function sendCanvas(obj) {
+  if (window.AndroidBridge && window.AndroidBridge.canvas) {
+    window.AndroidBridge.canvas(JSON.stringify(obj));
+  }
+}
+
 function setupBridge() {
   var make = function (action) {
     return function () {
       var args = Array.prototype.slice.call(arguments);
-      if (window.AndroidBridge && window.AndroidBridge.canvas) {
-        window.AndroidBridge.canvas(JSON.stringify({action: action, args: args}));
-      }
+      sendCanvas({action: action, args: args});
+    };
+  };
+  var makeField = function (action, field) {
+    return function () {
+      var args = Array.prototype.slice.call(arguments);
+      var value = args.pop();
+      var payload = {action: action, args: args};
+      payload[field] = value;
+      sendCanvas(payload);
     };
   };
   window.bridge = {
@@ -1004,7 +1115,15 @@ function setupBridge() {
     expand: make('expand'), moveItem: make('moveItem'), placeItem: make('placeItem'),
     dropNode: make('dropNode'), transform: make('transform'),
     copyItem: make('copyItem'), deleteItem: make('deleteItem'),
-    openSystem: make('openSystem')
+    openSystem: make('openSystem'),
+    openExpressionPair: make('openExpressionPair'),
+    dropNodeOnCanvas: make('dropNodeOnCanvas'),
+    setCollapsed: makeField('setCollapsed', 'collapsed'),
+    setTitle: makeField('setTitle', 'title'),
+    selectCard: make('selectCard'),
+    commonEquationSpec: make('commonEquationSpec'),
+    geometrySpec: make('geometrySpec'),
+    undo: make('undo'), redo: make('redo')
   };
 }
 

@@ -32,7 +32,8 @@ var TRANSFORM_METHODS = [
   ['op_pow', '乘方（指数为输入）'],
   ['op_recip', '取倒数'],
   ['op_square', '平方'],
-  ['op_sqrt', '算术平方根']
+  ['op_sqrt', '算术平方根'],
+  ['op_subs', '换元（输入符号 + 换元式）']
 ];
 
 /* 对齐桌面版 expr_viewer.ExpressionDialog：BASE_OPERATIONS + DIV_OPERATIONS，
@@ -74,6 +75,7 @@ var pendingDialog = null;
 var dlgMeta = {};
 var dlgSelectedId = null;
 var dlgSelectedOp = null;
+var dlgState = {};
 
 function opGroupHtml(group, title) {
   var buttons = DLG_OPS.filter(function (o) { return o[2] === group; }).map(function (o) {
@@ -84,15 +86,149 @@ function opGroupHtml(group, title) {
     '</div><div class="dlg-ops">' + buttons + '</div></div>';
 }
 
+function ceTypes(d) { return (d && d.spec && d.spec.types) || []; }
+function ceConditions(d, typeName) {
+  return ((d && d.spec && d.spec.conditions) || {})[typeName] || [];
+}
+function ceCurrent() {
+  var d = pendingDialog;
+  var typeSel = $('dlg-ce-type'), varSel = $('dlg-ce-variant'), methodSel = $('dlg-ce-method');
+  if (!d || !typeSel || !varSel || !methodSel) return null;
+  var types = ceTypes(d);
+  var t = types[Number(typeSel.value)] || types[0];
+  if (!t) return null;
+  var variants = t.variants || [];
+  var v = variants[Number(varSel.value)] || variants[0] || { names: [], hint: '' };
+  return { d: d, t: t, v: v, method: Number(methodSel.value) || 0,
+           variantIndex: Number(varSel.value) || 0 };
+}
+
+function renderCeParams() {
+  var c = ceCurrent();
+  var box = $('dlg-ce-params');
+  if (!c || !box) return;
+  var values = dlgState.params || {};
+  box.innerHTML = '<div class="dlg-note">' + esc(c.v.hint || '') +
+    '；留空表示保留该参数符号。</div>' +
+    (c.v.names || []).map(function (n) {
+      var id = 'ce-p-' + n;
+      return '<label>' + esc(n) + ' =</label>' +
+        '<div class="kbd-field-row"><input id="' + esc(id) + '" type="text" data-ce-param="' + esc(n) +
+        '" value="' + esc(values[n] || '') + '" placeholder="留空保留 ' + esc(n) + '">' +
+        '<button type="button" class="kbd-open" data-kbd="' + esc(id) + '" title="数学键盘">∑</button></div>';
+    }).join('');
+}
+
+function ceAvailableConditions(c) {
+  var list = ceConditions(c.d, c.t.name);
+  var std = (c.d.spec && c.d.spec.standardParabolaVariants) || [];
+  if (c.t.name === '抛物线' && std.indexOf(c.variantIndex) < 0) {
+    list = list.filter(function (e) { return e.name !== '准线' && e.name !== '焦点坐标'; });
+  }
+  return list;
+}
+
+function renderCeCondFields() {
+  var c = ceCurrent();
+  var sel = $('dlg-ce-cond-name'), box = $('dlg-ce-cond-fields');
+  if (!c || !sel || !box) return;
+  var entry = null;
+  ceAvailableConditions(c).forEach(function (e) { if (e.name === sel.value) entry = e; });
+  if (!entry) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="dlg-note">' + esc(entry.hint || '') + '</div>' +
+    (entry.fields || []).map(function (f) {
+      var id = 'ce-c-' + f[0];
+      return '<label>' + esc(f[1]) + '</label>' +
+        '<div class="kbd-field-row"><input id="' + esc(id) + '" type="text" data-ce-cond="' + esc(f[0]) +
+        '" placeholder="' + esc(f[2]) + '">' +
+        '<button type="button" class="kbd-open" data-kbd="' + esc(id) + '" title="数学键盘">∑</button></div>';
+    }).join('');
+}
+
+function renderCeConditions() {
+  var c = ceCurrent();
+  var box = $('dlg-ce-conds');
+  if (!c || !box) return;
+  var entries = ceAvailableConditions(c);
+  var list = dlgState.conditions || [];
+  box.innerHTML = '<label>条件类型</label><select id="dlg-ce-cond-name">' +
+    entries.map(function (e) { return '<option value="' + esc(e.name) + '">' + esc(e.name) + '</option>'; }).join('') +
+    '</select><div id="dlg-ce-cond-fields"></div>' +
+    '<div class="dlg-row"><button type="button" id="dlg-ce-cond-add" class="btn">添加条件</button></div>' +
+    '<div class="dlg-cond-list">' + list.map(function (item, i) {
+      var summary = Object.keys(item.values || {}).map(function (k) {
+        return k + '=' + item.values[k];
+      }).join('，');
+      return '<div class="dlg-cond"><span>' + esc(item.name) + '（' + esc(summary) + '）</span>' +
+        '<button type="button" class="btn small" data-ce-cond-del="' + i + '">删除</button></div>';
+    }).join('') + '</div>';
+  renderCeCondFields();
+}
+
+function renderCeVariants() {
+  var d = pendingDialog;
+  var typeSel = $('dlg-ce-type'), varSel = $('dlg-ce-variant');
+  if (!d || !typeSel || !varSel) return;
+  var types = ceTypes(d);
+  var t = types[Number(typeSel.value)] || types[0] || { variants: [] };
+  varSel.innerHTML = (t.variants || []).map(function (v, i) {
+    return '<option value="' + i + '">' + esc(v.label) + '</option>';
+  }).join('');
+  varSel.value = '0';
+}
+
+function renderCeAll() {
+  var c = ceCurrent();
+  if (!c) return;
+  $('dlg-ce-params').classList.toggle('hidden', c.method !== 0);
+  $('dlg-ce-conds').classList.toggle('hidden', c.method !== 1);
+  renderCeParams();
+  renderCeConditions();
+}
+
+function renderGeoFields() {
+  var d = pendingDialog;
+  var sel = $('dlg-geo-type'), box = $('dlg-geo-fields'), hint = $('dlg-geo-hint');
+  if (!d || !sel || !box) return;
+  var types = (d.spec && d.spec.types) || [];
+  var g = types[Number(sel.value)] || types[0];
+  if (!g) return;
+  if (hint) hint.textContent = g.hint || '';
+  var spec = d.spec || {};
+  var lists = {
+    point: spec.points || [],
+    line: spec.equations || [],
+    curve: (spec.equations || []).concat((spec.expressions || []).filter(function (x) {
+      return (spec.equations || []).indexOf(x) < 0;
+    }))
+  };
+  box.innerHTML = (g.fields || []).map(function (f) {
+    var id = 'geo-f-' + f[2];
+    var listId = 'geo-list-' + f[2];
+    var items = lists[f[1]] || [];
+    return '<label>' + esc(f[0]) + '</label>' +
+      '<datalist id="' + esc(listId) + '">' + items.map(function (x) {
+        return '<option value="' + esc(x) + '"></option>';
+      }).join('') + '</datalist>' +
+      '<div class="kbd-field-row"><input id="' + esc(id) + '" type="text" data-geo-field="' + esc(f[2]) +
+      '" list="' + esc(listId) + '" placeholder="' + esc(f[1] === 'point' ? '(a, b)' : '方程') + '">' +
+      '<button type="button" class="kbd-open" data-kbd="' + esc(id) + '" title="数学键盘">∑</button></div>';
+  }).join('');
+}
+
 function buildDialogBody(d) {
   if (d.kind === 'transform') {
     return '<div class="dlg-node">选中节点：<b>' + esc(d.nodeText) + '</b><br>' +
       esc(d.nodeType) + ' · 第 ' + esc(d.depth) + ' 层</div>' +
       '<label>变形 / 节点操作</label>' +
       '<select id="dlg-method">' + optionsHtml(TRANSFORM_METHODS, 'simplify') + '</select>' +
-      '<label>输入表达式（op_* 操作需要，如 x+1 或 2）</label>' +
-      '<div class="kbd-field-row"><input id="dlg-input" type="text" placeholder="例如 x+1">' +
+      '<label>输入表达式（op_* 操作需要；换元时填新符号如 t）</label>' +
+      '<div class="kbd-field-row"><input id="dlg-input" type="text" placeholder="例如 x+1 或 t">' +
       '<button type="button" class="kbd-open" data-kbd="dlg-input" title="数学键盘">∑</button></div>' +
+      '<label>换元式（仅「换元」需要，例如 x+1 表示令 t = x+1）</label>' +
+      '<div class="kbd-field-row"><input id="dlg-replace" type="text" placeholder="例如 x+1">' +
+      '<button type="button" class="kbd-open" data-kbd="dlg-replace" title="数学键盘">∑</button></div>' +
+      '<label class="dlg-check"><input id="dlg-ascopy" type="checkbox"> 保存为副本（不覆盖原卡片）</label>' +
       '<div class="dlg-note">SymPy 变形直接作用于选中节点；节点操作会用输入表达式与选中节点构造新子树。</div>';
   }
   if (d.kind === 'solve') {
@@ -113,7 +249,14 @@ function buildDialogBody(d) {
       '<label>未知量（逗号分隔）</label>' +
       '<div class="kbd-field-row"><input id="dlg-vars" type="text" value="' + esc(d.vars || 'x,y') + '">' +
       '<button type="button" class="kbd-open" data-kbd="dlg-vars" title="数学键盘">∑</button></div>' +
-      '<div class="dlg-note">韦达定理：只填一个未知量（如 x）时，会用另一张方程消去两式共有的其它变量，得到关于 x 的一元二次方程，再给出两根之和与两根之积；也可用「直接求解方程组」。</div>';
+      '<label>韦达定理生成项（仅韦达模式生效）</label>' +
+      '<div class="dlg-checks">' +
+      '<label class="dlg-check"><input type="checkbox" data-sys-out="sum" checked> 两根之和 x₁+x₂</label>' +
+      '<label class="dlg-check"><input type="checkbox" data-sys-out="product" checked> 两根之积 x₁·x₂</label>' +
+      '<label class="dlg-check"><input type="checkbox" data-sys-out="abs"> |x₁ − x₂|</label>' +
+      '<label class="dlg-check"><input type="checkbox" data-sys-out="delta"> 判别式 Δ</label>' +
+      '</div>' +
+      '<div class="dlg-note">韦达定理：只填一个未知量（如 x）时，会用结式消去 x/y/z 等其它变量，a/b/c 等符号作为参数保留在系数中；也可用「直接求解方程组」。</div>';
   }
   if (d.kind === 'nodeOp') {
     var ops = DLG_OP_GROUPS.map(function (g) { return opGroupHtml(g[0], g[1]); }).join('');
@@ -126,6 +269,34 @@ function buildDialogBody(d) {
         (d.nodeZero ? '（拖拽节点为零，不能作为除数或乘数）' : '') + '</div>' +
       ops +
       '<div class="dlg-note">结果会替换目标卡片中的选中节点，可撤销；未选择节点与操作时「确定」不可用。</div>';
+  }
+  if (d.kind === 'commonEquation') {
+    var types = ceTypes(d);
+    return '<label>生成方式</label><select id="dlg-ce-method">' +
+      optionsHtml([['0', '直接填写参数'], ['1', '用条件反推参数']], '0') + '</select>' +
+      '<label>方程类型</label><select id="dlg-ce-type">' +
+      types.map(function (t, i) { return '<option value="' + i + '">' + esc(t.name) + '</option>'; }).join('') +
+      '</select>' +
+      '<label>方程形式</label><select id="dlg-ce-variant"></select>' +
+      '<div id="dlg-ce-params"></div>' +
+      '<div id="dlg-ce-conds" class="hidden"></div>' +
+      '<div class="dlg-note">直接填写参数时留空即保留参数符号；用条件反推时会联立求解参数并生成方程卡片。</div>';
+  }
+  if (d.kind === 'geometry') {
+    var geoTypes = (d.spec && d.spec.types) || [];
+    return '<label>几何量</label><select id="dlg-geo-type">' +
+      geoTypes.map(function (g, i) { return '<option value="' + i + '">' + esc(g.label) + '</option>'; }).join('') +
+      '</select><div id="dlg-geo-fields"></div>' +
+      '<div id="dlg-geo-hint" class="dlg-note"></div>' +
+      '<div class="dlg-note">可从下拉选择画布中已有的点 / 方程卡片，也可直接输入；结果会生成新卡片（点用 Point 节点）。</div>';
+  }
+  if (d.kind === 'expressionPair') {
+    return '<div class="dlg-node">A（被覆盖）：<b>' + esc(d.textA || '') + '</b></div>' +
+      '<div class="dlg-node">B（拖拽）：<b>' + esc(d.textB || '') + '</b></div>' +
+      '<label>组合模板（用 A、B 与常数）</label>' +
+      '<div class="kbd-field-row"><input id="dlg-pair" type="text" value="A+B" placeholder="例如 A+B 或 A*B">' +
+      '<button type="button" class="kbd-open" data-kbd="dlg-pair" title="数学键盘">∑</button></div>' +
+      '<div class="dlg-note">A 表示被覆盖的表达式，B 表示拖拽的表达式；例如 A*B、A=B。</div>';
   }
   return '<div class="dlg-node">' + esc(d.text || '') + '</div>';
 }
@@ -207,6 +378,7 @@ function selectDlgNode(group) {
 
 function openDialog(d) {
   pendingDialog = d;
+  dlgState = { params: {}, conditions: [] };
   $('dlg-title').textContent = d.title || '对话框';
   $('dlg-body').innerHTML = buildDialogBody(d);
   dlgMeta = {}; dlgSelectedId = null; dlgSelectedOp = null;
@@ -218,6 +390,11 @@ function openDialog(d) {
     renderDlgFormula(d.latex);
   } else {
     $('dlg-ok').disabled = false;
+    if (d.kind === 'commonEquation') {
+      renderCeVariants();
+      renderCeAll();
+    }
+    if (d.kind === 'geometry') renderGeoFields();
   }
   $('dlg-mask').classList.remove('hidden');
 }
@@ -229,6 +406,7 @@ function closeDialog() {
   if (box) box.style.display = 'none';
   dlgSelectedId = null; dlgSelectedOp = null; dlgMeta = {};
   pendingDialog = null;
+  dlgState = {};
 }
 
 function collectDialog(d) {
@@ -236,15 +414,42 @@ function collectDialog(d) {
   if (d.kind === 'transform') {
     p.method = $('dlg-method').value;
     p.input = $('dlg-input').value.trim();
+    p.replace = $('dlg-replace').value.trim();
+    p.as_copy = $('dlg-ascopy').checked;
   } else if (d.kind === 'solve') {
     p['var'] = $('dlg-var').value.trim() || 'x';
     p.domain = $('dlg-domain').value;
   } else if (d.kind === 'system') {
     p.mode = $('dlg-mode').value;
     p.vars = $('dlg-vars').value.trim() || 'x,y';
+    p.outputs = [];
+    Array.prototype.forEach.call($('dlg-body').querySelectorAll('[data-sys-out]'), function (i) {
+      if (i.checked) p.outputs.push(i.getAttribute('data-sys-out'));
+    });
+    if (!p.outputs.length) p.outputs = ['sum', 'product'];
   } else if (d.kind === 'nodeOp') {
     p.op = dlgSelectedOp || 'add';
     p.target_node_id = dlgSelectedId || '';
+  } else if (d.kind === 'commonEquation') {
+    var c = ceCurrent();
+    p.type = c ? c.t.name : '圆';
+    p.variant = c ? c.variantIndex : 0;
+    p.method = c ? c.method : 0;
+    p.params = {};
+    Array.prototype.forEach.call($('dlg-body').querySelectorAll('[data-ce-param]'), function (i) {
+      p.params[i.getAttribute('data-ce-param')] = i.value.trim();
+    });
+    p.conditions = dlgState.conditions || [];
+  } else if (d.kind === 'geometry') {
+    var types = (d.spec && d.spec.types) || [];
+    var idx = Number($('dlg-geo-type').value) || 0;
+    p.type = (types[idx] || {}).key || 'distance';
+    p.fields = {};
+    Array.prototype.forEach.call($('dlg-body').querySelectorAll('[data-geo-field]'), function (i) {
+      p.fields[i.getAttribute('data-geo-field')] = i.value.trim();
+    });
+  } else if (d.kind === 'expressionPair') {
+    p.template = $('dlg-pair').value.trim();
   }
   return p;
 }
@@ -260,8 +465,45 @@ $('dlg-body').addEventListener('click', function (e) {
       x.classList.toggle('active', x === b);
     });
     updateDlgOk();
+    return;
+  }
+  if (target && target.id === 'dlg-ce-cond-add') {
+    var sel = $('dlg-ce-cond-name');
+    if (!sel || !sel.value) return;
+    var values = {};
+    Array.prototype.forEach.call($('dlg-body').querySelectorAll('[data-ce-cond]'), function (i) {
+      values[i.getAttribute('data-ce-cond')] = i.value.trim();
+    });
+    dlgState.conditions = (dlgState.conditions || []).concat([{ name: sel.value, values: values }]);
+    renderCeConditions();
+    return;
+  }
+  var del = target && target.closest ? target.closest('[data-ce-cond-del]') : null;
+  if (del) {
+    var index = Number(del.getAttribute('data-ce-cond-del'));
+    dlgState.conditions = (dlgState.conditions || []).filter(function (_x, i) { return i !== index; });
+    renderCeConditions();
   }
 });
+
+$('dlg-body').addEventListener('change', function (e) {
+  var id = e.target && e.target.id;
+  if (id === 'dlg-ce-type') {
+    dlgState.conditions = [];
+    renderCeVariants();
+    renderCeAll();
+  } else if (id === 'dlg-ce-variant') {
+    dlgState.conditions = [];
+    renderCeAll();
+  } else if (id === 'dlg-ce-method') {
+    renderCeAll();
+  } else if (id === 'dlg-ce-cond-name') {
+    renderCeCondFields();
+  } else if (id === 'dlg-geo-type') {
+    renderGeoFields();
+  }
+});
+
 $('dlg-cancel').addEventListener('click', closeDialog);
 $('dlg-mask').addEventListener('click', function (e) {
   if (e.target === $('dlg-mask')) closeDialog();
@@ -297,6 +539,8 @@ $('expr-input').addEventListener('keydown', function (e) {
 });
 $('undo-btn').addEventListener('click', function () { send({ action: 'undo', args: [] }); });
 $('redo-btn').addEventListener('click', function () { send({ action: 'redo', args: [] }); });
+$('common-btn').addEventListener('click', function () { send({ action: 'commonEquationSpec', args: [] }); });
+$('geometry-btn').addEventListener('click', function () { send({ action: 'geometrySpec', args: [] }); });
 
 /* ---------- Python 回帖 ---------- */
 window.applyCanvasResult = function (jsonText) {
@@ -316,6 +560,15 @@ window.applyCanvasResult = function (jsonText) {
   if (r.redo !== undefined) $('redo-btn').disabled = !r.redo;
   if (r.error) $('status').textContent = r.error;
   if (r.expr !== undefined) MathKeyboard.applyExpr(r);
+  if (r.properties) {
+    var p = r.properties;
+    canvas.querySelectorAll('.math-item').forEach(function (el) {
+      el.classList.toggle('selected', el.dataset.id === p.id);
+    });
+    $('sel-info').innerHTML = '卡片 ' + esc(p.id) + ' · ' + esc(p.kind) +
+      (p.title ? ' · ' + esc(p.title) : '');
+    $('detail').textContent = p.text + '\n取值范围：' + p.range + (p.note ? '\n备注：' + p.note : '');
+  }
   if (r.dialog) openDialog(r.dialog);
 };
 
